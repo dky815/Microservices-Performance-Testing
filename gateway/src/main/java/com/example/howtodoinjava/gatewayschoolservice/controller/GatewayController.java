@@ -41,8 +41,8 @@ public class GatewayController {
 	public String getStudents(@PathVariable String schoolname) {
 		System.out.println("Getting School details for " + schoolname);
 
-		String accessKey = "accessKey";
-		String secretKey = "secretKey";
+		String accessKey = "accessKey"; // replace with AKIA****
+		String secretKey = "secretKey"; // replace with FgDj****
 		String queueUrl = "https://sqs.us-east-1.amazonaws.com/944971585936/test";
 
 		String message = schoolname;
@@ -67,12 +67,46 @@ public class GatewayController {
 			System.exit(1);
 		}
 
-		String studentResponse = restTemplate.exchange("http://student-service/getStudentDetailsForSchool/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
-		}, schoolname).getBody();
-		String schoolResponse = restTemplate.exchange("http://school-service/getSchoolDetails/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
-		}, schoolname).getBody();
-		System.out.println("studentResponse Received as " + studentResponse);
-		return "School Info -  " + schoolResponse + " \n Student Details " + studentResponse;
+		//receive
+		System.out.println("\nReceive messages");
+		try {
+			// snippet-start:[sqs.java2.sqs_example.retrieve_messages]
+			ReceiveMessageRequest receiveMessageRequest = ReceiveMessageRequest.builder()
+					.queueUrl(queueUrl)
+					.maxNumberOfMessages(1)
+					.build();
+			List<Message> message1 = sqsClient.receiveMessage(receiveMessageRequest).messages();
+			for (Message m : message1) {
+				schoolname = m.body();
+
+				System.out.println("\n" + m.body());
+
+				String studentResponse = restTemplate.exchange("http://student-service/getStudentDetailsForSchool/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
+				}, schoolname).getBody();
+				String schoolResponse = restTemplate.exchange("http://school-service/getSchoolDetails/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
+				}, schoolname).getBody();
+				System.out.println("studentResponse Received as " + studentResponse);
+
+				DeleteMessageRequest deleteMessageRequest = DeleteMessageRequest.builder()
+						.queueUrl(queueUrl)
+						.receiptHandle(m.receiptHandle())
+						.build();
+				sqsClient.deleteMessage(deleteMessageRequest);
+
+				return "School Info -  " + schoolResponse + " \n Student Details " + studentResponse;
+			}
+
+		} catch (SqsException e) {
+			System.err.println(e.awsErrorDetails().errorMessage());
+			System.exit(1);
+		}
+//		String studentResponse = restTemplate.exchange("http://student-service/getStudentDetailsForSchool/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
+//		}, schoolname).getBody();
+//		String schoolResponse = restTemplate.exchange("http://school-service/getSchoolDetails/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
+//		}, schoolname).getBody();
+//		System.out.println("studentResponse Received as " + studentResponse);
+//		return "School Info -  " + schoolResponse + " \n Student Details " + studentResponse;
+		return null;
 	}
 
 	@Bean
