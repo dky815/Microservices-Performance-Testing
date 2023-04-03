@@ -11,16 +11,26 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.services.sqs.AmazonSQS;
-import com.amazonaws.services.sqs.model.SendMessageRequest;
-import com.amazonaws.services.sqs.AmazonSQSClientBuilder;
-import com.amazonaws.services.sqs.model.ReceiveMessageRequest;
-import com.amazonaws.services.sqs.model.ReceiveMessageResult;
-import com.amazonaws.services.sqs.model.Message;
 import java.util.List;
+
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest;
+import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlResponse;
+import software.amazon.awssdk.services.sqs.model.ListQueuesRequest;
+import software.amazon.awssdk.services.sqs.model.ListQueuesResponse;
+import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
+import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequest;
+import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
+import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
+import software.amazon.awssdk.services.sqs.model.SqsException;
 
 @RestController
 public class GatewayController {
@@ -31,54 +41,37 @@ public class GatewayController {
 	public String getStudents(@PathVariable String schoolname) {
 		System.out.println("Getting School details for " + schoolname);
 
-		String accessKey = "your-access-key";
-		String secretKey = "your-secret-key";
+		String accessKey = "accessKey";
+		String secretKey = "secretKey";
 		String queueUrl = "https://sqs.us-east-1.amazonaws.com/944971585936/test";
 
 		String message = schoolname;
 
-		//send
-		AmazonSQS sqs = AmazonSQSClientBuilder.standard()
-				.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(queueUrl, "us-east-1"))
-				.withCredentials(new AWSStaticCredentialsProvider(
-						new BasicAWSCredentials(accessKey, secretKey)))
+		SqsClient sqsClient = SqsClient.builder()
+				.region(Region.US_EAST_1)
+				.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
 				.build();
 
-		SendMessageRequest send_msg_request = new SendMessageRequest()
-				.withQueueUrl(queueUrl)
-				.withMessageBody(message)
-				.withDelaySeconds(5); // Optional delay before the message is available to consumers
+		//send
+		System.out.println("\nSend messages");
+		try {
+			// snippet-start:[sqs.java2.sqs_example.send_message]
+			sqsClient.sendMessage(SendMessageRequest.builder()
+					.queueUrl(queueUrl)
+					.messageBody(schoolname)
+					.build());
+			// snippet-end:[sqs.java2.sqs_example.send_message]
 
-		sqs.sendMessage(send_msg_request);
-
-		//receive
-		while (true) {
-			ReceiveMessageRequest receiveRequest = new ReceiveMessageRequest()
-					.withQueueUrl(queueUrl) // Replace with your queue URL
-					.withMaxNumberOfMessages(1) // Max messages to receive per request (1-10)
-					.withWaitTimeSeconds(20); // Long polling wait time (0-20 seconds)
-
-			ReceiveMessageResult result = sqs.receiveMessage(receiveRequest);
-			List<Message> messages = result.getMessages();
-
-			for (Message message : messages) {
-				// Process the message here
-				System.out.println("Received message: " + message.getBody());
-
-				// Delete the message from the queue once it's processed
-				String messageReceiptHandle = message.getReceiptHandle();
-				sqs.deleteMessage(queueUrl, messageReceiptHandle);
-			}
+		} catch (SqsException e) {
+			System.err.println(e.awsErrorDetails().errorMessage());
+			System.exit(1);
 		}
-
-
 
 		String studentResponse = restTemplate.exchange("http://student-service/getStudentDetailsForSchool/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
 		}, schoolname).getBody();
 		String schoolResponse = restTemplate.exchange("http://school-service/getSchoolDetails/{schoolname}", HttpMethod.GET, null, new ParameterizedTypeReference<String>() {
 		}, schoolname).getBody();
 		System.out.println("studentResponse Received as " + studentResponse);
-
 		return "School Info -  " + schoolResponse + " \n Student Details " + studentResponse;
 	}
 
