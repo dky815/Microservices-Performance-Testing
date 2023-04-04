@@ -26,3 +26,11 @@ management:
 logging:
   level:
     com.example.howtodoinjava: DEBUG
+
+
+active-mq:
+  broker-url: tcp://localhost:61616
+  school-req-topic: school.req.topic
+  school-resp-topic: school.resp.topic
+  student-req-topic: student.req.topic
+  student-resp-topic: student.resp.topic
